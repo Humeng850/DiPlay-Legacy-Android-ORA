@@ -1,117 +1,142 @@
-# DiPlay Legacy Android (中文版)
+# DiPlay Legacy Android — 欧拉黑猫（好客）适配版
 
-[简体中文](README.zh-CN.md) · [English](README.md)
+[English](README.md) · [简体中文](README.zh-CN.md)
 
-> 本项目基于开源项目 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 进行深度兼容与重构。
->
-> **关于与上游原版的定位差异**：
-> - 上游原项目在最新版本已向下适配至 **Android 7.0+ (API 24)**，主要面向 64 位及较新版本的车机系统。
-> - 本项目致力于补充 **Android 4.4 KitKat (API 19) 至 Android 6.0** 这一区间的极老车机市场，以及全志 T3、联发科 MTK、AC8227L、Intel x86 等 **32 位老旧芯片与定制 ROM**，并对日产航盛等专有蓝牙车机提供深度定制兼容。
->
-> 上游原项目地址：https://github.com/shihabal3amri/DiPlay
+**面向欧拉好猫 / 黑猫及其它好客（HAOKE）车机的 CarPlay 方案。** 本项目是
+[DiPlay Legacy Android](https://github.com/programmerguohuajing/DiPlay-Legacy-Android) 的一个 fork，
+新增了**好客车机原生车辆数据源**——直接从车机 CAN 总线读取真实车速、电量（SOC）、续航、挡位、充电状态和胎压，
+并在 CarPlay 中显示，替代上游仅支持 BYD 的 ADB 读取路径。
 
-为兼容的比亚迪及老旧 Android 车机提供有线（USB）及无线 CarPlay 互联支持，内置熟悉的 DiAuto 风格界面。独立应用包名：`com.shihab.diplay`。
-
-**验证边界：最低安装版本不等于真机连接保证。** 当前 T3 / Android 4.4 适配基于 API 19 软件检查和模拟器专项测试；尚未完成该 T3 车机与 iPhone 15 Pro / iOS 26.6 的 USB、蓝牙、热点、画面、声音和触控全链路验证。内置实验性附件身份的本地签名成功，也不等于 iPhone 必然认可它。专项结果见 [T3 验证记录](docs/T3-ANDROID44-VALIDATION.md)。
+> **上游项目**：https://github.com/shihabal3amri/DiPlay 及其兼容性 fork
+> https://github.com/programmerguohuajing/DiPlay-Legacy-Android。本仓库基于 legacy-Android fork，
+> 在其之上加入欧拉/好客数据源。
 
 ---
 
-## 核心改进与特性
+## 本 fork 新增了什么
 
-相比上游原版（主要面向 Android 7.1+ 及现代 64 位平台），本项目针对老车机进行了全方位底层加固与重构：
+上游 DiPlay 面向 **BYD** 车型，通过 **ADB**（车机自带的 `autoservice`）读取车辆数据。而欧拉好猫 / 黑猫
+车机运行的是另一套中间件——**好客 CarManager**（`com.haoke.carmanager`），它通过 AIDL 服务（而非 ADB）
+对外暴露车机 CAN 总线数据。
 
-### 1. 深度适配低版本 Android 系统 (Android 4.4 ~ Android 7.0)
-- **系统门槛下探至 Android 4.4 (API 19)**：为基础运行路径增加旧版实现与 API 判断。仅在高版本可用的实验性功能不会因此获得低版本硬件支持：
-  - 修复 Android 7.0 以下因 `Configuration.locales` 引发的 `NoSuchFieldError` 启动闪退。
-  - 修复 Android 6.0 以下因调用 `Context.getSystemService(Class)` 引发的 `NoSuchMethodError` 闪退。
-  - 修复 Android 5.0 以下 `Theme.Material` 主题缺失导致的膨胀异常，回退兼容 Holo 主题。
-  - 修复无 `BluetoothLeScanner` 低版本系统的蓝牙扫描，支持手动输入蓝牙 MAC 地址连接。
-  - 修复非比亚迪 AOSP 老车机音频通道（默认 stream 14 异常，自适应降级为标准 STREAM_MUSIC）。
+本 fork 新增了**好客数据源**，让同样的 CarPlay 车辆状态功能（仪表盘电量、车速死区推算、挡位）能在
+欧拉/好客硬件上工作：
 
-### 2. 解决安装与解析包失败问题
-- **双重签名机制 (v1 JAR + v2 APK Signature)**：
-  - 上游原版通常仅打 v2 签名，导致 Android 4.4 / 6.0 老车机安装时直接提示“无法解析安装包”。
-  - 本项目采用生产签名证书，同时生成 v1 与 v2 签名，满足旧版 Android 的签名格式要求。具体安装和覆盖升级结果见专项验证记录。
+| 能力 | 上游（BYD） | 本 fork（欧拉/好客） |
+|---|---|---|
+| 车辆数据传输 | ADB `autoservice` | 好客 `ICarService` AIDL UART 回调 |
+| 车速 | BYD ADB | 好客 CAN 帧（`project=44`） |
+| 电量（SOC） | BYD ADB | 好客 CAN 帧（`project=44`） |
+| 剩余续航 | BYD ADB | 好客 CAN 帧（`project=44`） |
+| 挡位（R/N/D） | BYD ADB | 好客 CAN 帧（`project=44`） |
+| 充电状态 | BYD ADB | 好客 CAN 帧（`project=43`） |
+| 胎压 | — | 好客 CAN 帧（`project=40`，已解析但不上报 iPhone） |
 
-### 3. 全架构 CPU 支持 (包含 32 位老车机芯片)
-- **原生编译 4 种 CPU 架构**：包括 `armeabi-v7a` (32位 ARM)、`x86` (32位 Intel)、`arm64-v8a`、`x86_64`。
-- **提供 32 位车机所需的 ARMv7 原生库**。这解决缺少该架构库的问题，不代表 T3 / AC8227L / 展讯 / 联发科所有固件的 USB、蓝牙和解码器均已实测。
-
-### 4. 内置离线 MFi 认证证书
-- 独立安装包构建会带入本地私有认证材料，无需配置外部认证服务器。该身份是实验性的，本地签名成功并不能保证 iPhone 接受，也不是 Apple 认证。
-
-### 5. USB 底层连接优化与驱动冲突解决
-- **自动驱动脱钩 (解决 `iPhone USB configuration is busy` / errno 16)**：底层 C 语言驱动层在切换 Configuration 6 遇到 `EBUSY` 时，自动探测并执行 `USBDEVFS_DISCONNECT` 解绑内核冲突驱动，并自动重试。
-- **全志 T3 等芯片专属单 fd 共享**：USBMUX 与 NCM 数据通道共用已授权的底层设备描述符，避免二次 `openDevice` 导致内核抛出 `ENOENT` / `EBUSY`。
-
-### 6. 东风日产等搭载航盛定制协议栈车机深度适配 (HSAE P170/P660)
-- **航盛私有蓝牙服务 AIDL 深度适配**：支持日产逍客、轩逸、奇骏、天籁等搭载的航盛专用蓝牙栈（`com.hsae.bluetoothservice` 与 `com.anwsdk.service`），突破原生 AOSP RFCOMM Socket 读超时断连限制 (`IOException: read failed ... ret: -1`)。
-- **混合蓝牙适配架构 (Hybrid Bluetooth Adapter)**：运行时动态探测航盛服务，在非日产设备上 100% 干净回退至标准 Android 蓝牙，做到对所有平台透明无感。
-- **Linux 4.9 内核热点 IPv6 路由黑洞修复**：解决日产定制 Android 9 内核下 link-local IPv6 导致 iPhone 热点连接“正在搜索设备”卡死的问题，优先采用稳定 IPv4 握手。
-- **AudioTrack 兼容防护**：针对定制系统 `AudioTrack.getAudioAttributes()` 调用异常添加保护，防止音频通道初始化崩溃。
+**检测到好客车机时优先走好客路径**，BYD 路径保留作为 BYD 硬件的兜底。检测是全自动的：App 检查
+`com.haoke.carmanager` 是否已安装，据此路由。
 
 ---
 
-## 安装与升级重要说明
+## 车辆数据是怎么读到的
 
-> [!IMPORTANT]
-> **必须先卸载旧版本！**
-> 
-> 由于 Android 系统的安全规范，不同作者构建的 APK 签名证书各不相同：
-> 1. 上游原版、第三方修改版与本项目的 **Release 签名私钥不同**。
-> 2. 如果您的车机上之前安装过其他版本的 DiPlay，直接安装本项目 APK 会被系统提示 **“签名冲突 / 无法安装 / 与已安装应用签名不一致”**。
-> 3. **解决方法**：请在车机【应用管理】中**完全卸载旧版 DiPlay**，然后再安装本项目的最新 Release 安装包。以后升级本项目的后续版本可直接覆盖安装。
+```
+DiPlay App
+   │  bindService("action.haoke.CARSERVICE")     (com.haoke.carmanager)
+   ▼
+好客 CarService  (com.haoke.service.CarService)
+   │  registerCallBackWithUart(mode, ICarCallBack, ICarUartCallBack)
+   ▼
+ICarUartCallBack  —  实时推送原始 UART 字节（CAN 帧）
+   │
+   ▼
+HaokeCanParser.parse()  —  解码 0x5A 0xA5 … 帧
+   │
+   ▼
+HaokeOutputs  —  喂给 VehicleSpeedSource / VehicleStatusProvider
+   │
+   ▼
+iAP2 车辆状态（0xA101）→ iPhone → CarPlay 仪表盘
+```
 
-> [!TIP]
-> **车机真实 Android 版本检测（排查安装解析失败）**：
-> 很多老款后装/改装车机在系统界面显示的“Android 10/11/12”存在商家虚标（实测底层常为 Android 4.4、5.1 或 6.0 深度魔改）。
-> 如果您在安装时提示 **“解析程序包出现问题”** 或安装失败，可以使用这位开发者提供的车机版本检测工具查看真实的 Android 系统版本与 API Level：
-> 👉 **[headunit-version-inspector (车机版本检测)](https://github.com/493330227-wq/headunit-version-inspector)**
+CAN 帧格式为 `0x5A 0xA5 [len] 0xA9 [project] [subcmd] [payload…]`，尾部带校验和。字段映射与社区
+「黑猫助手」工具使用的欧拉逆向布局一致：
 
----
+| `project` | 含义 | 解析出的字段 |
+|---|---|---|
+| `44` | 新能源 | 车速、电量、续航、挡位、总里程、能耗、功率 |
+| `43` | 车辆状态 | 充电状态、充电限值 |
+| `40` | 胎压 | 四轮胎压（原始值） |
+| `37` | 空调 | 空调开关、压缩机、风量、温度、加热 |
 
-## 连接使用与排查建议
-
-### 有线 (USB) 连接
-1. **排查原厂投屏软件占用**：
-   - 很多老款车机（如全志 T3、亿连车机）出厂自带“亿连”、“CarLife”、“Zlink”等后台守护进程。这些程序开机后会抢先霸占 iPhone 的 USB 接口。
-   - 建议在车机【设置】→【应用管理】中，将原厂的“亿连”或“CarLife”点击**【强行停止】**（或关闭其自启动权限）。
-2. **连接步骤**：
-   - 拔下 iPhone 数据线；
-   - 打开 DiPlay 进入等待连接界面；
-   - 将 iPhone 插入车机主 USB 数据口（支持互联的数据口，非仅供电口）；
-   - iPhone 弹出“信任此电脑”时点击**【信任】**。
-
-### 无线连接
-- 支持 车机热点（Car Hotspot）、Wi-Fi Direct 以及 局域网（Same LAN）三种模式。
-- 在部分不支持蓝牙 BLE Scanning 的老车机上，可在设置中手动填入车机蓝牙 MAC 地址以完成握手配对。
-
----
-
-## 硬件适配与安装包推荐
-
-| 安装包类型 | 适用设备 | 说明 |
-| :--- | :--- | :--- |
-| **通用版 (Universal)** | 各类车机均可使用 | 内置全架构 so，适合不清楚芯片架构的用户 |
-| **ARMv7 专版 (armeabi-v7a)** | 全志 T3、AC8227L、展讯等 32 位老车机 | 体积精简 60% 以上，降低 4.4 系统 Dalvik 内存开销 |
-| **x86 专版** | Intel 凌动 / x86 架构 Android 车机 | 解决 Issue #18 反馈的 x86 车机兼容 |
+> **关于 `mode` 的说明**：`registerCallBackWithUart` 的 `mode` 参数只是「客户端去重键」，不是数据过滤器。
+> 好客 `CarService` 会无条件把 UART 数据广播给每一个注册过的回调，与 `mode` 无关；这里使用的 `32561`
+> （沿用自黑猫助手）是任意值，传任何 `int` 都行。
 
 ---
 
-## 问题反馈与交流讨论
+## 构建
 
-- **Issues 讨论**：如果遇到任何问题，欢迎在 [Issues](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues) 中发帖讨论，作者有时间就会回复解答。
-- **提供日志**：遇到具体问题时，**最好贴出详细的运行日志或诊断报告**，以便快速排查定位问题：
-  1. 打开 DiPlay【设置】→【诊断】→【保存诊断报告】（v0.2.27 起已支持自动同步写入插上的 U 盘及 SD 卡根目录 `/mnt/sdcard/DiPlay/`）。
-  2. 将导出的 `.txt` 诊断报告或相关截图/崩溃信息附在 Issue 描述中。
-  3. 注明车机芯片型号、实际 Android 系统版本、iPhone 型号及 iOS 版本。
-- **欢迎提交 PR**：老车机硬件型号繁多、ROM 深度定制，欢迎有能力的开发者提交 Pull Request (PR) 共同完善兼容支持！
-- ⭐ **点赞支持**：如果这个项目对你的老车机有所帮助，请顺手帮我点个 **Star**，感谢大家的支持与鼓励！
+这是一个 Gradle 多模块 Android 工程。完整工具链见 [docs/BUILD.md](docs/BUILD.md)
+（JDK 25、Android SDK 37、NDK r25c，用于 API 19 的原生构建）。
+
+```bash
+./gradlew :mobile:assembleDebug      # 主 DiPlay App → mobile/build/outputs/apk/debug/
+```
+
+`mobile` 模块是主 CarPlay App（`com.shihab.diplay`）；`home` 是桌面示例，`maphost` 是地图示例。
+好客车辆数据源位于 `common/src/main/java/com/shilapi/xcertplay/haoke/`（解析器、AIDL 客户端、
+数据源，以及入口 `HaokeOutputs`），装配进 `CarPlayHostActivity` 与 `DiPlayActivity`。
+
+CAN 解析器的单元测试位于
+`shared/src/test/java/com/shilapi/xcertplay/haoke/HaokeCanParserTest.kt`。
 
 ---
 
-## 开源协议与鸣谢
+## 安装
 
-- 基于 [xcertplay](https://github.com/shilapi/xcertplay) (GPL-3.0) 与 [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) 开发。
-- UI 交互衍生自 [DiAuto](https://github.com/shihabal3amri/DiAuto) (AGPL-3.0)。
-- CarPlay 为 Apple Inc. 的注册商标，本项目仅供技术学习与车载兼容性研究。
+APK 装在**车机**上，而不是 iPhone。无需越狱、外接盒子、Mac、账号或认证服务器。车机必须允许安装 APK；
+使用欧拉数据源时，车机还需预装好客 CarManager（`com.haoke.carmanager`）——欧拉好猫 / 黑猫车机均已预装。
+
+- **有线 USB** 与**无线** CarPlay（Wi-Fi Direct、车机热点、现有 Wi-Fi / 同一局域网）。
+- 最低 Android **4.2（API 17）**；实测基线 Android 4.4–6.0，同样可运行在较新的 Android 上。
+
+详见上游 [INSTALL](docs/INSTALL.md) 与 [COMPATIBILITY](docs/COMPATIBILITY.md) 指南。
+
+---
+
+## 欧拉车型上的车辆状态功能
+
+连接成功并检测到好客数据源后：
+
+- **电量（SOC）与剩余续航** 显示在 CarPlay 的电动车/仪表盘状态中。
+- **车速** 供 iPhone 死区推算使用（隧道导航连续性）。
+- **挡位**（R/N/D）在车辆状态协议允许时上报。
+
+**定位**来源是车机自带 GPS——好客通过标准 Android `LocationManager` 暴露，DiPlay 的
+`AndroidCarPlayLocationProvider` 已直接消费，无需额外桥接。
+
+**胎压** 已从 CAN 帧解析，但**不上报** iPhone：iAP2 车辆状态通道没有胎压字段，苹果也不会消费它。
+
+---
+
+## 现状与注意事项
+
+本 fork 是一个**依赖特定硬件的社区适配**，并非苹果认证产品。APK 内置了从公开 Carlinkit 固件中恢复的
+实验性配件身份（见 [SECURITY.md](SECURITY.md)）。未来 iOS 更新后的兼容性、跨车机可靠性，以及该身份
+是否适合广泛分发，均尚未解决。
+
+好客 CAN 字段映射与 `mode` 值来自对社区「黑猫助手」APK 的逆向，**尚未在实车上验证**。在采信仪表盘
+数字之前，请在实车上确认车速 / 电量 / 续航 / 挡位会更新。若某个值不动，最可能的原因是：
+(1) 好客 CarManager 不存在或未运行；(2) 你固件的 CAN 帧布局不同——两者都可通过 `adb logcat`，
+结合 `HaokeVehicleData` / `HaokeCanParser` / `CarPlayLocation` 标签排查。
+
+---
+
+## 致谢
+
+- 基于 [DiPlay](https://github.com/shihabal3amri/DiPlay)（[xcertplay](https://github.com/shilapi/xcertplay)，GPL-3.0）与
+  [DiPlay Legacy Android](https://github.com/programmerguohuajing/DiPlay-Legacy-Android)。
+- 好客车辆数据源移植自社区「黑猫助手」的 `VehicleDataParser` 字段映射。
+- CarPlay 及其图标归 Apple Inc. 所有；与 Apple、欧拉或 BYD 无任何隶属或背书关系。
+
+详见上游 [发布说明](CHANGELOG.md) 与 [第三方声明](docs/THIRD_PARTY_NOTICES.md)。

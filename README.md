@@ -1,84 +1,156 @@
-# DiPlay Legacy Android
+# DiPlay Legacy Android — ORA (Haoke) Edition
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-> This project is modified from [shihabal3amri/DiPlay](https://github.com/shihabal3amri/DiPlay) with deep compatibility refactoring.
->
-> **Scope difference with upstream**:
-> - Upstream DiPlay supports **Android 7.0+ (API 24)** in latest releases, primarily targeting modern 64-bit platforms.
-> - This project focuses on **Android 4.4 KitKat (API 19) through Android 6.0**, as well as legacy 32-bit automotive hardware architectures (`armeabi-v7a`, `x86`, Allwinner T3, MediaTek, AC8227L), low-level Linux usbfs driver hardening, and proprietary Bluetooth stacks (e.g., Hangsheng HSAE for Dongfeng Nissan).
->
-> Upstream project: https://github.com/shihabal3amri/DiPlay
+**CarPlay for the ORA Good Cat (欧拉好猫/黑猫) and other HAOKE-based head units.** This is a fork of
+[DiPlay Legacy Android](https://github.com/programmerguohuajing/DiPlay-Legacy-Android) that adds a
+**native vehicle-data source for HAOKE head units** — real speed, battery (SOC), remaining range,
+gear, charging state and tire pressure read directly from the car's CAN bus, surfaced inside CarPlay
+instead of the BYD-only ADB path the upstream project uses.
 
-**CarPlay for compatible BYD and legacy Android head units.** Wired and wireless, with the familiar DiAuto interface. Independent app: `com.shihab.diplay`.
+> **Upstream**: https://github.com/shihabal3amri/DiPlay and its compatibility fork
+> https://github.com/programmerguohuajing/DiPlay-Legacy-Android. This repository starts from the
+> legacy-Android fork and adds the ORA/HAOKE data source on top.
 
-> **BYD support scope:** These projects focus on BYD cars. They may work on other brands, but other brands are unsupported and there are no plans to add support or fix brand-specific incompatibilities.
+---
 
-[Download & website](https://programmerguohuajing.github.io/DiPlay-Legacy-Android/) · [Releases](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/releases) · [Report a problem](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues/new/choose)
+## What this fork adds
 
-![DiPlay home](site/assets/home.png)
+The upstream DiPlay targets **BYD** cars and reads vehicle data over **ADB** (the head unit's own
+`autoservice`). ORA Good Cat / Black Cat head units run a different middleware — **HAOKE
+CarManager** (`com.haoke.carmanager`) — which exposes the car's CAN-bus data through an AIDL service
+instead of ADB.
 
-## Current release — 0.2.88
+This fork adds a **HAOKE data source** so the same CarPlay vehicle-status features (dashboard battery,
+wheel-speed dead reckoning, gear) work on ORA/HAOKE hardware:
 
-Install on the **car**, not the iPhone. No jailbreak, dongle, Mac, account or authentication server is required for use. Core CarPlay does not require ADB; optional dashboard, battery, wheel-speed and parked-video features do. Your head unit must permit APK installation. The APK installs on Android 4.2+ (API 17); the tested legacy baseline is Android 4.4 through 6.0, and it also runs on current Android versions. Wireless supports Wi-Fi Direct, the car's own hotspot, Existing Wi-Fi / Same LAN, and — on rooted units whose framework cannot open a hotspot at all — an experimental root hostapd mode (Settings → Advanced). Android 9 Wi-Fi Direct uses a firmware-dependent legacy path with generated group credentials and unverified requested frequency; see [Android 9 Wi-Fi Direct](docs/ANDROID9_WIFI_DIRECT.md). Android 10+ verifies its negotiated group frequency. See [Releases](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/releases) for the current version and its notes.
+| Capability | Upstream (BYD) | This fork (ORA/HAOKE) |
+|---|---|---|
+| Vehicle data transport | ADB `autoservice` | HAOKE `ICarService` AIDL UART callback |
+| Speed | BYD ADB | HAOKE CAN frame (`project=44`) |
+| Battery (SOC) | BYD ADB | HAOKE CAN frame (`project=44`) |
+| Remaining range | BYD ADB | HAOKE CAN frame (`project=44`) |
+| Gear (R/N/D) | BYD ADB | HAOKE CAN frame (`project=44`) |
+| Charging state | BYD ADB | HAOKE CAN frame (`project=43`) |
+| Tire pressure | — | HAOKE CAN frame (`project=40`, parsed, not reported to iPhone) |
 
-- Wired USB and wireless CarPlay with local authentication.
-- BYD HUD navigation with arrows, distance and street names on verified firmware.
-- Car hotspot support, improved audio buffering and saved receive diagnostics.
-- Automatic address discovery, fixed-channel Wi-Fi fallbacks and successful-configuration memory.
-- Icon/text size, resolution and frame rate; applying a display change reconnects CarPlay.
-- Local diagnostic export. Reports are sent only if you choose to share them.
-- Separate installation alongside DiAuto. Run one projection app at a time.
-- Legacy Android fallbacks for media keys, notification/services, USB configuration and requests, audio/video codecs, multidex and Java library APIs.
+The HAOKE path is **preferred when a HAOKE head unit is detected**, with the BYD path kept as a
+fallback for BYD hardware. Detection is automatic: the app checks whether `com.haoke.carmanager` is
+installed and routes accordingly.
 
-This is **not an Apple-certified product**. The APK bundles an experimental accessory identity recovered from public Carlinkit firmware, not a newly provisioned MFi identity for DiPlay. A bundled private key is extractable. Acceptance after future iOS updates, reliability across head units and suitability of that identity for general distribution are unresolved. This release invites community testing; it is not a guarantee of universal compatibility.
+---
 
-Earlier releases were tested on the development DiLink5.1 car: live windshield guidance and street names work, Car hotspot now starts CarPlay, and Wi-Fi Direct performance is substantially improved. Occasional audio cutouts remain and are deferred to a later update. The floating-map test build was installed on the development DiLink 5.1 car; feedback led to the pinch corrections in 0.2.9. Earlier wheel-speed and video contributions were tested on a BYD Tang with DiLink 5.0 and an iPhone 15 Pro on iOS 27; wheel-speed dead reckoning in tunnels remains unverified. Broader head-unit and iOS compatibility is not guaranteed. The HUD firmware scope and cleanup limits are documented in [BYD navigation](docs/BYD_NAVIGATION.md).
+## How the vehicle data is read
 
-## What’s new in 0.2.14 (historical)
+```
+DiPlay app
+   │  bindService("action.haoke.CARSERVICE")     (com.haoke.carmanager)
+   ▼
+HAOKE CarService  (com.haoke.service.CarService)
+   │  registerCallBackWithUart(mode, ICarCallBack, ICarUartCallBack)
+   ▼
+ICarUartCallBack  —  pushes raw UART bytes (CAN frames) in real time
+   │
+   ▼
+HaokeCanParser.parse()  —  decodes 0x5A 0xA5 … frames
+   │
+   ▼
+HaokeOutputs  —  feeds VehicleSpeedSource / VehicleStatusProvider
+   │
+   ▼
+iAP2 vehicle status (0xA101) → iPhone → CarPlay dashboard
+```
 
-- Searchable Settings, clear categories, quick controls and reconnect notices, with layouts for short screens and Arabic RTL.
-- **Interface size** from Automatic to 200% for DiPlay's own controls, separate from CarPlay picture sizing.
-- Default automatic connection choice: Last used, Wireless or USB; scheduled day/night appearance; more reliable car-button image selection.
-- Targeted USB/Bluetooth recovery, hotspot address discovery, video output on windows without hardware acceleration, and safer wireless handoff.
-- **Smooth video (experimental)**, off by default, with a latency tradeoff and no picture adjustments on its SurfaceView path.
-- Configurable wheel-key Siri, microphone-source fallback, optional audio-focus handling and BYD call-watcher repairs.
-- **Call echo cancellation** and **Clearer call voices**, experimental and off by default; opt-in changes apply at the next connection.
-- Album artwork proportions, system-bar-aware rotation/split-screen areas and recognition of an observed DiLink 3 cluster surface.
+The CAN frame format is `0x5A 0xA5 [len] 0xA9 [project] [subcmd] [payload…]`, with a trailing
+checksum. Field mapping follows the ORA reverse-engineered layout used by the community "Black Cat
+helper" tool:
 
-See [0.2.14 release notes](docs/RELEASE-NOTES-0.2.14.md) and [validation](docs/VALIDATION.md) for contribution links and remaining physical tests. General stutter, calls/Siri, decoder and model-specific reports still need current-device evidence. [0.2.13 notes](docs/RELEASE-NOTES-0.2.13.md) remain available as historical guidance.
+| `project` | Meaning | Parsed fields |
+|---|---|---|
+| `44` | New energy | speed, battery %, range, gear, mileage, consumption, power |
+| `43` | Vehicle status | charging state, charge-limit % |
+| `40` | Tire | 4× tire pressure (raw) |
+| `37` | Air conditioning | A/C on/off, compressor, wind level, temperature, heating |
 
-If a problem remains, reproduce it on **the current release**, then use **Settings → Diagnostics → Save diagnostic report**. Android 10+ normally saves to **Downloads/DiPlay**; Android 9 uses the document picker. If unavailable, use **View report** or **Share** from the confirmation, which identifies external/private fallback storage. Review the `.txt` and add it to a matching [existing issue](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues), or [create one](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues/new/choose). Include vehicle/head-unit model, exact firmware and Android/DiLink, phone/iOS, connection backend, relevant settings, steps and failure time. Reports are shared only when you choose; never post your hotspot password.
+> **Note on `mode`:** the `mode` argument to `registerCallBackWithUart` is a client dedup key, not a
+> data filter. HAOKE's `CarService` broadcasts UART data to every registered callback regardless of
+> `mode`; the value used here (`32561`, inherited from the Black Cat helper) is arbitrary and any
+> `int` works.
 
-## Documentation
+---
 
-[Existing Wi-Fi / Same LAN](docs/EXISTING_WIFI.md) keeps the iPhone and head unit
-on an external router. See the guide for setup, build requirements and the
-BYD DiLink 4.0 / Android 10 clean-install validation result.
+## Build
 
-- [Install and connect](docs/INSTALL.md)
-- [Compatibility and troubleshooting](docs/COMPATIBILITY.md)
-- [Smooth wireless CarPlay](docs/SMOOTH_WIRELESS.md)
-- [Privacy and diagnostic reports](docs/PRIVACY.md)
-- [Build from source](docs/BUILD.md) — select `mobile` for the main DiPlay app; `maphost` is a map sample.
-- [Validation](docs/VALIDATION.md)
-- [Release notes](CHANGELOG.md)
-- [Credits and licenses](docs/THIRD_PARTY_NOTICES.md)
+This is a Gradle multi-module Android project. See [docs/BUILD.md](docs/BUILD.md) for the full
+toolchain (JDK 25, Android SDK 37, NDK r25c for the API 19 native build).
 
-The app and release website are available in English, Arabic, Russian, Ukrainian, Spanish, Simplified Chinese and Traditional Chinese (Taiwan). Traditional Chinese uses Taiwan wording; the app also recognizes Hong Kong/Macao and explicit Hant selections without claiming separate regional translations. Choose the app language in Settings; on Android 13+, it stays synchronized with Android’s per-app language setting.
+```bash
+./gradlew :mobile:assembleDebug      # main DiPlay app → mobile/build/outputs/apk/debug/
+```
 
-## Source and credits
+The `mobile` module is the main CarPlay app (`com.shihab.diplay`); `home` is a launcher sample and
+`maphost` a map sample. The HAOKE vehicle-data source lives in
+`common/src/main/java/com/shilapi/xcertplay/haoke/` (parser, AIDL client, data sources, and the
+`HaokeOutputs` entry point), wired into `CarPlayHostActivity` and `DiPlayActivity`.
 
-Based on [xcertplay](https://github.com/shilapi/xcertplay), GPL-3.0. The home/settings UI and website adapt [DiAuto](https://github.com/shihabal3amri/DiAuto), AGPL-3.0; that license is included in `docs/licenses`. Preserve those notices when distributing modifications. CarPlay and its icon belong to Apple Inc.; no Apple or BYD affiliation or endorsement is implied.
+Unit tests for the CAN parser are in
+`shared/src/test/java/com/shilapi/xcertplay/haoke/HaokeCanParserTest.kt`.
 
-This repository starts with a clean public source snapshot. Local research, tester reports and release-signing secrets are excluded. The source corresponding to the APK is provided with every release, with one explicit exception: the two experimental runtime identity files bundled in the APK are provisioned locally at release time and are not part of the source archive, so a source-only build does not reproduce the release APK's authentication function. Those assets are described in the build instructions and notices.
+---
 
-## Community & Feedback
+## Install
 
-- **Issues & Discussions**: Feel free to discuss questions and issues in [GitHub Issues](https://github.com/programmerguohuajing/DiPlay-Legacy-Android/issues). We will reply whenever time permits.
-- **Check Real Android OS Version**: If installation fails (e.g. "There was a problem parsing the package"), your aftermarket head unit may have a spoofed system version (such as fake Android 10/11/12 on top of real Android 4.4/5.1). You can use this head unit inspection tool provided by [@493330227-wq](https://github.com/493330227-wq) to check your genuine Android version and API level:  
-  👉 **[headunit-version-inspector](https://github.com/493330227-wq/headunit-version-inspector)**
-- **Attach Diagnostic Logs**: When reporting a specific problem, attaching detailed diagnostic logs (via **Settings → Diagnostics → Save diagnostic report**, automatically exported to USB/SD cards since v0.2.27) and environment details (head-unit model, Android version, iPhone/iOS version) is strongly recommended.
-- **Contributions Welcome**: Pull Requests (PRs) from experienced developers are warmly welcomed to help improve compatibility across various legacy automotive hardware!
-- ⭐ **Support**: If this project is helpful to you, please give it a **Star**!
+Install the APK on the **car's head unit**, not the iPhone. No jailbreak, dongle, Mac, account or
+authentication server is required. The head unit must permit APK installation, and for the ORA data
+source it must ship the HAOKE CarManager (`com.haoke.carmanager`) — which is preinstalled on ORA Good
+Cat / Black Cat head units.
 
+- **Wired USB** and **wireless** CarPlay (Wi-Fi Direct, car hotspot, existing Wi-Fi / same LAN).
+- Minimum Android **4.2 (API 17)**; tested baseline Android 4.4–6.0, also runs on current Android.
+
+See the upstream [INSTALL](docs/INSTALL.md) and
+[COMPATIBILITY](docs/COMPATIBILITY.md) guides.
+
+---
+
+## Vehicle-status features on ORA
+
+Once connected and the HAOKE source is detected:
+
+- **Battery (SOC) & remaining range** appear in CarPlay's EV/dashboard status.
+- **Speed** feeds iPhone dead reckoning (tunnel navigation continuity).
+- **Gear** (R/N/D) is reported where the vehicle-status protocol allows.
+
+The **positioning** source is the car's own GPS, which HAOKE surfaces through the standard Android
+`LocationManager` — DiPlay's `AndroidCarPlayLocationProvider` already consumes it, so no extra bridge
+is required.
+
+**Tire pressure** is parsed from the CAN frames but is *not* reported to the iPhone: the iAP2 vehicle
+status channel has no tire-pressure field and Apple does not consume it.
+
+---
+
+## Status & caveats
+
+This fork is a **hardware-dependent community adaptation**, not an Apple-certified product. The APK
+bundles an experimental accessory identity recovered from public Carlinkit firmware (see
+[SECURITY.md](SECURITY.md)). Acceptance after future iOS updates, reliability across head units, and
+suitability of that identity for general distribution are unresolved.
+
+The HAOKE CAN field mapping and `mode` value were derived by reverse-engineering the community
+"Black Cat helper" APK and have **not yet been verified on a physical ORA vehicle**. Before trusting
+dashboard numbers, confirm on a real car that speed / SOC / range / gear update. If a value does not
+move, the most likely causes are (1) HAOKE CarManager is absent or not running, or (2) the CAN frame
+layout differs on your firmware — both are inspectable via `adb logcat` with the
+`HaokeVehicleData` / `HaokeCanParser` / `CarPlayLocation` tags.
+
+---
+
+## Credits
+
+- Based on [DiPlay](https://github.com/shihabal3amri/DiPlay) ([xcertplay](https://github.com/shilapi/xcertplay), GPL-3.0) and
+  [DiPlay Legacy Android](https://github.com/programmerguohuajing/DiPlay-Legacy-Android).
+- HAOKE vehicle-data source ported from the community "Black Cat helper" (黑猫助手) `VehicleDataParser` field mapping.
+- CarPlay and its icon belong to Apple Inc.; no Apple, ORA or BYD affiliation or endorsement is implied.
+
+See the upstream [release notes](CHANGELOG.md) and [third-party notices](docs/THIRD_PARTY_NOTICES.md).
