@@ -139,18 +139,19 @@ internal class HaokeVehicleClient(
             return
         }
         c.binder = binder
-        c.death = IBinder.DeathRecipient {
+        val death = IBinder.DeathRecipient {
             c.worker.post {
                 if (current(c) && c.binder == binder) recover(c, "车辆数据 Binder 已断开")
             }
         }
+        c.death = death
         c.callback = CallbackBinder()
         c.uartCallback = UartCallbackBinder(c)
         c.lastUartMillis = SystemClock.elapsedRealtime()
         val data = Parcel.obtain()
         val reply = Parcel.obtain()
         try {
-            binder.linkToDeath(c.death, 0)
+            binder.linkToDeath(death, 0)
             data.writeInterfaceToken(SERVICE_DESCRIPTOR)
             data.writeInt(MODE_ID)
             data.writeStrongBinder(c.callback)
@@ -190,8 +191,10 @@ internal class HaokeVehicleClient(
     private fun clearBinder(c: Connection) {
         c.accepting = false
         c.registered = false
-        if (c.binder != null && c.death != null) {
-            try { c.binder.unlinkToDeath(c.death, 0) } catch (_: RuntimeException) {}
+        val binder = c.binder
+        val death = c.death
+        if (binder != null && death != null) {
+            try { binder.unlinkToDeath(death, 0) } catch (_: RuntimeException) {}
         }
         c.death = null
         c.binder = null
@@ -206,13 +209,14 @@ internal class HaokeVehicleClient(
         c.worker.removeCallbacks(c.timeout)
         c.worker.removeCallbacks(c.retry)
         c.worker.removeCallbacks(c.watchdog)
-        if (c.registrationAttempted && c.binder != null && c.binder.isBinderAlive) {
+        val binder = c.binder
+        if (c.registrationAttempted && binder != null && binder.isBinderAlive) {
             val data = Parcel.obtain()
             val reply = Parcel.obtain()
             try {
                 data.writeInterfaceToken(SERVICE_DESCRIPTOR)
                 data.writeInt(MODE_ID)
-                if (c.binder.transact(UNREGISTER, data, reply, 0)) {
+                if (binder.transact(UNREGISTER, data, reply, 0)) {
                     reply.readException()
                     Log.i(TAG, "unregister result=${reply.readInt()}")
                 }
@@ -268,7 +272,7 @@ internal class HaokeVehicleClient(
                 recover(this, "车辆数据回调超时")
             } else {
                 retryDelayMs = 1_000L
-                worker.postDelayed(this, CONNECT_TIMEOUT_MS)
+                worker.postDelayed(watchdog, CONNECT_TIMEOUT_MS)
             }
         }
 

@@ -45,7 +45,7 @@ class AndroidCarPlayLocationProvider(
                     "fix provider=$provider lat=${location.latitude} lng=${location.longitude} " +
                         "acc=${if (location.hasAccuracy()) location.accuracy else -1f}m " +
                         "speed=${if (location.hasSpeed()) location.speed else -1f}m/s " +
-                        "sat=${if (location.extras?.containsKey("satellites") == true) location.extras.getInt("satellites") else -1}",
+                        "sat=${if (location.extras?.containsKey("satellites") == true) location.extras?.getInt("satellites") ?: -1 else -1}",
                 )
             }
         }

@@ -103,8 +103,8 @@ internal object HaokeVehicleData {
  * 直接读取 [HaokeVehicleData] 的缓存，iAP2 循环永不阻塞。
  */
 internal class HaokeWheelSpeedSource : VehicleSpeedSource {
-    private const val TAG = "HaokeWheelSpeed"
-    private const val MAX_SAMPLES = 40
+    private val TAG = "HaokeWheelSpeed"
+    private val MAX_SAMPLES = 40
 
     private val samples = ArrayList<VehicleSpeedSample>()
     private var gear: VehicleGear? = null
