@@ -142,6 +142,9 @@ CAN frame layout differs on your firmware — both are inspectable via `adb logc
 
 - Based on [DiPlay](https://github.com/shihabal3amri/DiPlay) ([xcertplay](https://github.com/shilapi/xcertplay), GPL-3.0) and
   [DiPlay Legacy Android](https://github.com/programmerguohuajing/DiPlay-Legacy-Android).
+- The CAN frame field mapping for the vehicle-data source was derived from the community "Black Cat
+  helper" (黑猫助手) tool; special thanks to its authors for their reverse-engineering work on the ORA
+  CAN-bus protocol.
 - CarPlay and its icon belong to Apple Inc.; no Apple, ORA or BYD affiliation or endorsement is implied.
 
 See the upstream [release notes](CHANGELOG.md) and [third-party notices](docs/THIRD_PARTY_NOTICES.md).

@@ -129,6 +129,7 @@ CAN 字段映射**尚未在实车上验证**。在采信仪表盘数字之前，
 
 - 基于 [DiPlay](https://github.com/shihabal3amri/DiPlay)（[xcertplay](https://github.com/shilapi/xcertplay)，GPL-3.0）与
   [DiPlay Legacy Android](https://github.com/programmerguohuajing/DiPlay-Legacy-Android)。
+- 车辆数据源的 CAN 帧字段映射参考了社区「黑猫助手」工具，特此感谢其作者对欧拉 CAN 总线协议的逆向工作。
 - CarPlay 及其图标归 Apple Inc. 所有；与 Apple、欧拉或 BYD 无任何隶属或背书关系。
 
 详见上游 [发布说明](CHANGELOG.md) 与 [第三方声明](docs/THIRD_PARTY_NOTICES.md)。
