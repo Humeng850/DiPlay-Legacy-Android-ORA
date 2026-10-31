@@ -40,6 +40,13 @@ class AndroidCarPlayLocationProvider(
             val provider = location.provider ?: return
             if (provider in preferredProviders) {
                 latestFixes[provider] = location
+                Log.i(
+                    TAG,
+                    "fix provider=$provider lat=${location.latitude} lng=${location.longitude} " +
+                        "acc=${if (location.hasAccuracy()) location.accuracy else -1f}m " +
+                        "speed=${if (location.hasSpeed()) location.speed else -1f}m/s " +
+                        "sat=${if (location.extras?.containsKey("satellites") == true) location.extras.getInt("satellites") else -1}",
+                )
             }
         }
 
@@ -112,6 +119,13 @@ class AndroidCarPlayLocationProvider(
 
     override fun latestNmea(): String? {
         val fix = latestFix() ?: return null
+        Log.i(
+            TAG,
+            "sending nmea from provider=${fix.provider ?: "?"} " +
+                "lat=${fix.latitude} lng=${fix.longitude} " +
+                "acc=${if (fix.hasAccuracy()) fix.accuracy else -1f}m " +
+                "speed=${if (fix.hasSpeed()) fix.speed else -1f}m/s",
+        )
         return try {
             NmeaLocationEncoder.encode(
                 CarPlayLocationFix(

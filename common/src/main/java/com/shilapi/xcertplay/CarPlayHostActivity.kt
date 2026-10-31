@@ -105,6 +105,7 @@ import com.shilapi.xcertplay.settings.SettingsWidgets
 import com.shilapi.xcertplay.transport.Iap2IdentificationConfig
 import com.shilapi.xcertplay.transport.Iap2LocationProvider
 import com.shilapi.xcertplay.util.safeStackTrace
+import com.shilapi.xcertplay.haoke.HaokeOutputs
 import com.shilapi.xcertplay.transport.IphoneUsbMatcher
 import com.shilapi.xcertplay.transport.UsbDeviceId
 import com.shilapi.xcertplay.transport.VehicleSpeedLocationProvider
@@ -187,9 +188,9 @@ class CarPlayHostActivity : ComponentActivity() {
             hardwareVersion = "1.0",
             carPlayUsbInterfaceNumber = 3,
             locationInformationEnabled = locationReportingEnabled,
-            vehicleStatusEnabled = com.shilapi.xcertplay.hud.BydOutputSettings.batteryToIphoneActive(this),
+            vehicleStatusEnabled = com.shilapi.xcertplay.hud.BydOutputSettings.batteryToIphoneActive(this) || HaokeOutputs.available(this),
             chargingConnectors = com.shilapi.xcertplay.hud.BydOutputSettings.chargingConnectors(this),
-            vehicleSpeedEnabled = locationReportingEnabled && com.shilapi.xcertplay.hud.BydOutputSettings.wheelSpeedToIphoneActive(this),
+            vehicleSpeedEnabled = locationReportingEnabled && (com.shilapi.xcertplay.hud.BydOutputSettings.wheelSpeedToIphoneActive(this) || HaokeOutputs.available(this)),
         ),
         label = "DiPlay",
         hostName = "diplay-" + DiPlayBootstrap.deviceId(airPlayIdentity).replace(":", "").lowercase(),
@@ -4920,7 +4921,8 @@ class CarPlayHostActivity : ComponentActivity() {
                 !config.locationReportingEnabled -> null
                 config.identification.vehicleSpeedEnabled -> VehicleSpeedLocationProvider(
                     AndroidCarPlayLocationProvider(this),
-                    com.shilapi.xcertplay.hud.BydNavigationOutputs.wheelSpeed(applicationContext),
+                    if (HaokeOutputs.available(this)) HaokeOutputs.wheelSpeed(applicationContext)
+                    else com.shilapi.xcertplay.hud.BydNavigationOutputs.wheelSpeed(applicationContext),
                 )
                 else -> AndroidCarPlayLocationProvider(this)
             }
@@ -4982,7 +4984,8 @@ class CarPlayHostActivity : ComponentActivity() {
             clearPairRecord = { AirPlayPersistence.clearLockdownRecord(this) },
             locationProvider = locationProvider,
             vehicleStatusProvider = if (com.shilapi.xcertplay.hud.BydOutputSettings.batteryToIphoneActive(this)) {
-                com.shilapi.xcertplay.hud.BydNavigationOutputs.batteryStatus(applicationContext)
+                if (HaokeOutputs.available(this)) HaokeOutputs.batteryStatus(applicationContext)
+                else com.shilapi.xcertplay.hud.BydNavigationOutputs.batteryStatus(applicationContext)
             } else {
                 null
             },

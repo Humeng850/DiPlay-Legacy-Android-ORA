@@ -302,6 +302,7 @@ class DiPlayActivity : ComponentActivity() {
         navigationStreamType = AirPlayPersistence.loadNavigationStreamType(this)
         languagePreferenceAtCreate = AppLocale.preference(this)
         com.shilapi.xcertplay.hud.BydNavigationOutputs.onAppOpened(applicationContext)
+        com.shilapi.xcertplay.haoke.HaokeOutputs.onAppOpened(applicationContext)
         WheelKeyService.restoreIfNeeded(this)
         WindowCompat.setDecorFitsSystemWindows(window, true)
         if (realSdkInt() >= Build.VERSION_CODES.LOLLIPOP) {
