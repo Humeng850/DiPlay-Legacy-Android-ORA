@@ -256,13 +256,13 @@ internal class HaokeVehicleClient(
         @Volatile var uartCallback: UartCallbackBinder? = null
         val uartCount = java.util.concurrent.atomic.AtomicLong()
 
-        val retry = Runnable {
+        val retry: Runnable = Runnable {
             if (current(this)) { close(this); bind(token, worker) }
         }
-        val timeout = Runnable {
+        val timeout: Runnable = Runnable {
             if (!registered) recover(this, "车辆数据连接超时")
         }
-        val watchdog = Runnable {
+        val watchdog: Runnable = Runnable {
             if (!current(this) || !registered) return@Runnable
             val silentMs = SystemClock.elapsedRealtime() - lastUartMillis
             Log.i(TAG, "UART count=${uartCount.get()} silentMs=$silentMs")
