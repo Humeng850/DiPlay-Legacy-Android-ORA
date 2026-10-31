@@ -142,7 +142,8 @@ internal object HaokeCanParser {
 
         if (b.size == 37 && validChecksum(b)) {
             s.gearRaw = (i6 shr 4) and 0x0f
-            s.gearValid = s.gearRaw in 1..6
+            // 与黑猫 GearState.isKnown 一致：仅 R=2 / N=3 / D=4 视为已知挡位
+            s.gearValid = s.gearRaw == 2 || s.gearRaw == 3 || s.gearRaw == 4
         }
 
         s.batteryPercent = ((i4 shr 6) or (i5 shl 2)) / 10.0f
